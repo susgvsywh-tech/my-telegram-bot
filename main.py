@@ -8,14 +8,13 @@ from telegram.ext import (
     ContextTypes,
     filters,
 )
+from telegram.request import HTTPXRequest
 
-# Logging Setup
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     level=logging.INFO
 )
 
-# ---------------- DATABASE SETUP (Auto Learning Storage) ----------------
 def init_db():
     conn = sqlite3.connect("bot_brain.db")
     cursor = conn.cursor()
@@ -50,13 +49,10 @@ def get_memory_response(text):
     conn.close()
     return row[0] if row else None
 
-# Global Data Variables
 group_rules = {}
 welcome_messages = {}
 bad_words = ["badword1", "badword2"]
 warn_counts = {}
-
-# ---------------- ALL COMMAND HANDLERS ----------------
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Welcome to Rain Bot! Type /help to see available commands.")
@@ -167,8 +163,6 @@ async def filter_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         bad_words.append(word)
         await update.message.reply_text(f"Added '{word}' to the filter list.")
 
-# ---------------- MESSAGES PROCESSOR (FILTER & AUTO-LEARN) ----------------
-
 async def handle_all_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message or not update.message.text:
         return
@@ -176,32 +170,37 @@ async def handle_all_messages(update: Update, context: ContextTypes.DEFAULT_TYPE
     msg = update.message
     text = msg.text.strip()
 
-    # 1. Bad Word Filter Check
     for word in bad_words:
         if word in text.lower():
             await msg.delete()
             await msg.reply_text(f"{msg.from_user.mention_html()}, bad words are not allowed.", parse_mode="HTML")
             return
 
-    # 2. Auto Learning (Learns from replied messages)
     if msg.reply_to_message and msg.reply_to_message.text:
         original = msg.reply_to_message.text.strip()
         reply_txt = text
         if not original.startswith("/") and not reply_txt.startswith("/"):
             save_memory(original, reply_txt)
 
-    # 3. Auto Reply from Database
     bot_reply = get_memory_response(text)
     if bot_reply:
         await msg.reply_text(bot_reply)
 
-# ---------------- MAIN APP ----------------
-
 def main():
     TOKEN = "8634664133:AAF98GJ3U96BsBI-k08DYo-fh_X98xHLPeM"
-    app = ApplicationBuilder().token(TOKEN).build()
+    
+    # PythonAnywhere Free Plan အတွက် Proxy Setting
+    request = HTTPXRequest(
+        proxy_url="http://proxy.server:3128"
+    )
+    
+    app = (
+        ApplicationBuilder()
+        .token(TOKEN)
+        .request(request)
+        .build()
+    )
 
-    # Register Command Handlers
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("help", help_cmd))
     app.add_handler(CommandHandler("id", get_id))
@@ -220,7 +219,6 @@ def main():
     app.add_handler(CommandHandler("setwelcome", setwelcome))
     app.add_handler(CommandHandler("filter", filter_cmd))
 
-    # All Text Auto Reply/Learn Handler
     app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_all_messages))
 
     print("Bot is running...")
@@ -228,4 +226,4 @@ def main():
 
 if __name__ == '__main__':
     main()
-  
+    
